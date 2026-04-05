@@ -1,39 +1,39 @@
-using System.Text.Json.Serialization;
+using Newtonsoft.Json;
 
 namespace Mogify.Api.Models;
 
 public class StudentProfile
 {
-    [JsonPropertyName("predicted_grades")]
+    [JsonProperty("predicted_grades")]
     public string? PredictedGrades { get; set; }
 
-    [JsonPropertyName("target_subject")]
+    [JsonProperty("target_subject")]
     public string? TargetSubject { get; set; }
 
-    [JsonPropertyName("school_type")]
+    [JsonProperty("school_type")]
     public string? SchoolType { get; set; }
 
-    [JsonPropertyName("location_preference")]
+    [JsonProperty("location_preference")]
     public string? LocationPreference { get; set; }
 
-    [JsonPropertyName("admissions_test_score")]
+    [JsonProperty("admissions_test_score")]
     public string? AdmissionsTestScore { get; set; }
 
-    [JsonPropertyName("key_experiences")]
+    [JsonProperty("key_experiences")]
     public string? KeyExperiences { get; set; }
 
-    [JsonPropertyName("ucas_choices")]
+    [JsonProperty("ucas_choices")]
     public List<UcasChoice>? UcasChoices { get; set; }
 }
 
 public class UcasChoice
 {
-    [JsonPropertyName("uni_slug")]
+    [JsonProperty("uni_slug")]
     public string UniversitySlug { get; set; } = string.Empty;
 
-    [JsonPropertyName("status")]
+    [JsonProperty("status")]
     public string Status { get; set; } = string.Empty;
 
-    [JsonPropertyName("offer")]
+    [JsonProperty("offer")]
     public string? Offer { get; set; }
 }

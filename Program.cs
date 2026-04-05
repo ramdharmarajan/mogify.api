@@ -51,7 +51,12 @@ builder.Services.AddHttpClient();
 
 // ── MVC ────────────────────────────────────────────────────────────────────
 builder.Services.AddControllers()
-    .AddNewtonsoftJson();
+    .AddNewtonsoftJson(options =>
+        options.SerializerSettings.ContractResolver =
+            new Newtonsoft.Json.Serialization.DefaultContractResolver
+            {
+                NamingStrategy = new Newtonsoft.Json.Serialization.SnakeCaseNamingStrategy()
+            });
 
 var app = builder.Build();
 
