@@ -1,33 +1,33 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
-using System.Text.Json;
 
 namespace Mogify.Api.Middleware;
 
 public class SupabaseAuthMiddleware
 {
+    private static readonly HashSet<string> _publicPrefixes =
+    [
+        "/health",
+        "/auth/",
+        "/universities",
+    ];
+
     private readonly RequestDelegate _next;
     private readonly ILogger<SupabaseAuthMiddleware> _logger;
-    private readonly string _supabaseUrl;
-    private readonly string _supabaseAnonKey;
 
-    public SupabaseAuthMiddleware(RequestDelegate next, ILogger<SupabaseAuthMiddleware> logger, IConfiguration configuration)
+    public SupabaseAuthMiddleware(RequestDelegate next, ILogger<SupabaseAuthMiddleware> logger)
     {
         _next = next;
         _logger = logger;
-        _supabaseUrl = configuration["SUPABASE_URL"]
-            ?? throw new InvalidOperationException("SUPABASE_URL is not configured.");
-        _supabaseAnonKey = configuration["SUPABASE_ANON_KEY"] ?? string.Empty;
     }
 
     public async Task InvokeAsync(HttpContext context)
     {
-        var endpoint = context.GetEndpoint();
-        var allowAnonymous = endpoint?.Metadata?.GetMetadata<IAllowAnonymous>() != null;
+        var path = context.Request.Path.Value?.ToLowerInvariant() ?? "";
+        var isPublic = _publicPrefixes.Any(p => path.StartsWith(p));
 
-        if (!allowAnonymous)
+        if (!isPublic)
         {
             var authHeader = context.Request.Headers.Authorization.FirstOrDefault();
             if (authHeader == null || !authHeader.StartsWith("Bearer "))

@@ -46,6 +46,9 @@ builder.Services.AddSingleton<StripeService>();
 // ── Session store (in-memory for MVP) ──────────────────────────────────────
 builder.Services.AddSingleton<SessionStore>();
 
+// ── HttpClient ─────────────────────────────────────────────────────────────
+builder.Services.AddHttpClient();
+
 // ── MVC ────────────────────────────────────────────────────────────────────
 builder.Services.AddControllers()
     .AddNewtonsoftJson();
