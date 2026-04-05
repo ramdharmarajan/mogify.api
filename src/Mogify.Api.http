@@ -1,0 +1,6 @@
+@Mogify.Api_HostAddress = http://localhost:5129
+
+GET {{Mogify.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
