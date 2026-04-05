@@ -19,8 +19,8 @@ public class StripeService
     {
         var priceId = tier switch
         {
-            "applicant" => "price_applicant",  // Replace with real Stripe price IDs
-            "premium" => "price_premium",
+            "applicant" => "price_1TIxAQBNaSSijei9KV1wD0hS",
+            "premium"   => "price_1TIxAtBNaSSijei9bMYIsmym",
             _ => throw new ArgumentException($"Unknown tier: {tier}")
         };
 
