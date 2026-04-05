@@ -69,7 +69,7 @@ public class SupabaseService
 
     public async Task<PsSession> CreatePsSessionAsync(string userId)
     {
-        var record = new PsSessionRecord { UserId = userId };
+        var record = new PsSessionRecord { UserId = userId, CreatedAt = DateTime.UtcNow };
         var result = await _client.From<PsSessionRecord>().Insert(record);
         return ToSession(result.Models.First());
     }
@@ -94,10 +94,10 @@ public class SupabaseService
     public async Task SavePsSessionMessagesAsync(string sessionId, List<PsMessage> messages)
     {
         var json = JsonConvert.SerializeObject(messages);
-        var record = new PsSessionRecord { Id = sessionId, Messages = json };
         await _client.From<PsSessionRecord>()
             .Where(s => s.Id == sessionId)
-            .Update(record);
+            .Set(s => s.Messages, json)
+            .Update();
     }
 
     private static PsSession ToSession(PsSessionRecord r) => new()
@@ -116,7 +116,8 @@ public class SupabaseService
         {
             UserId = userId,
             UniversitySlug = universitySlug,
-            Subject = subject
+            Subject = subject,
+            CreatedAt = DateTime.UtcNow
         };
         var result = await _client.From<InterviewSessionRecord>().Insert(record);
         return ToInterviewSession(result.Models.First());
@@ -133,10 +134,10 @@ public class SupabaseService
     public async Task SaveInterviewTurnsAsync(string sessionId, List<InterviewTurn> turns)
     {
         var json = JsonConvert.SerializeObject(turns);
-        var record = new InterviewSessionRecord { Id = sessionId, Turns = json };
         await _client.From<InterviewSessionRecord>()
             .Where(s => s.Id == sessionId)
-            .Update(record);
+            .Set(s => s.Turns, json)
+            .Update();
     }
 
     private static InterviewSession ToInterviewSession(InterviewSessionRecord r) => new()
