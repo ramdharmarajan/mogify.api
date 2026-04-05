@@ -11,17 +11,15 @@ public class InterviewController : ControllerBase
 {
     private readonly SupabaseService _supabase;
     private readonly ClaudeService _claude;
-    private readonly SessionStore _sessions;
 
-    public InterviewController(SupabaseService supabase, ClaudeService claude, SessionStore sessions)
+    public InterviewController(SupabaseService supabase, ClaudeService claude)
     {
         _supabase = supabase;
         _claude = claude;
-        _sessions = sessions;
     }
 
     private string GetUserId() =>
-        User.FindFirstValue("sub") ?? User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "anonymous";
+        User.Claims.FirstOrDefault(c => c.Type == "sub")?.Value ?? "anonymous";
 
     [HttpGet("questions/{universitySlug}/{subject}")]
     public async Task<IActionResult> GetQuestions(string universitySlug, string subject)
@@ -39,14 +37,13 @@ public class InterviewController : ControllerBase
         if (questions.Count == 0)
             return NotFound(new { error = $"No questions found for {request.UniversitySlug} / {request.Subject}" });
 
-        var session = _sessions.CreateInterviewSession(userId, request.UniversitySlug, request.Subject);
-
-        // Prime the session with the first question
+        var session = await _supabase.CreateInterviewSessionAsync(userId, request.UniversitySlug, request.Subject);
         var course = await _supabase.GetCourseAsync(request.UniversitySlug, request.Subject);
+
         var rng = new Random();
         var firstQuestion = questions[rng.Next(questions.Count)];
-
         session.Turns.Add(new InterviewTurn { Question = firstQuestion.Question });
+        await _supabase.SaveInterviewTurnsAsync(session.Id, session.Turns);
 
         return CreatedAtAction(nameof(GetSession), new { id = session.Id }, new
         {
@@ -59,14 +56,13 @@ public class InterviewController : ControllerBase
     }
 
     [HttpGet("sessions/{id}")]
-    public IActionResult GetSession(string id)
+    public async Task<IActionResult> GetSession(string id)
     {
-        var session = _sessions.GetInterviewSession(id);
+        var session = await _supabase.GetInterviewSessionAsync(id);
         if (session == null)
             return NotFound(new { error = "Session not found." });
 
-        var userId = GetUserId();
-        if (session.UserId != userId)
+        if (session.UserId != GetUserId())
             return Forbid();
 
         return Ok(session);
@@ -75,12 +71,11 @@ public class InterviewController : ControllerBase
     [HttpPost("sessions/{id}/answer")]
     public async Task<IActionResult> SubmitAnswer(string id, [FromBody] SubmitAnswerRequest request)
     {
-        var session = _sessions.GetInterviewSession(id);
+        var session = await _supabase.GetInterviewSessionAsync(id);
         if (session == null)
             return NotFound(new { error = "Session not found." });
 
-        var userId = GetUserId();
-        if (session.UserId != userId)
+        if (session.UserId != GetUserId())
             return Forbid();
 
         var currentTurn = session.Turns.LastOrDefault(t => t.Answer == null);
@@ -91,45 +86,38 @@ public class InterviewController : ControllerBase
         var course = await _supabase.GetCourseAsync(session.UniversitySlug, session.Subject);
 
         var feedback = await _claude.GetInterviewFeedbackAsync(
-            session.UniversitySlug,
-            session.Subject,
+            session.UniversitySlug, session.Subject,
             course?.InterviewFormat ?? "Panel",
-            questions,
-            currentTurn.Question,
-            request.Answer);
-
-        // Parse score from feedback (look for "X/10" pattern)
-        var score = ExtractScore(feedback);
+            questions, currentTurn.Question, request.Answer);
 
         currentTurn.Answer = request.Answer;
         currentTurn.Feedback = feedback;
-        currentTurn.Score = score;
+        currentTurn.Score = ExtractScore(feedback);
 
-        // Add next question if more questions available
         string? nextQuestion = null;
-        var answeredQuestions = session.Turns.Where(t => t.Answer != null).Select(t => t.Question).ToHashSet();
-        var unanswered = questions.Where(q => !answeredQuestions.Contains(q.Question)).ToList();
+        var answered = session.Turns.Where(t => t.Answer != null).Select(t => t.Question).ToHashSet();
+        var unanswered = questions.Where(q => !answered.Contains(q.Question)).ToList();
 
         if (unanswered.Count > 0 && session.Turns.Count < 5)
         {
-            var rng = new Random();
-            var next = unanswered[rng.Next(unanswered.Count)];
+            var next = unanswered[new Random().Next(unanswered.Count)];
             session.Turns.Add(new InterviewTurn { Question = next.Question });
             nextQuestion = next.Question;
         }
 
-        return Ok(new { feedback, score, next_question = nextQuestion });
+        await _supabase.SaveInterviewTurnsAsync(id, session.Turns);
+
+        return Ok(new { feedback, score = currentTurn.Score, next_question = nextQuestion });
     }
 
     [HttpGet("sessions/{id}/summary")]
     public async Task<IActionResult> GetSummary(string id)
     {
-        var session = _sessions.GetInterviewSession(id);
+        var session = await _supabase.GetInterviewSessionAsync(id);
         if (session == null)
             return NotFound(new { error = "Session not found." });
 
-        var userId = GetUserId();
-        if (session.UserId != userId)
+        if (session.UserId != GetUserId())
             return Forbid();
 
         var summary = await _claude.GetInterviewSessionSummaryAsync(session);

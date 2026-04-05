@@ -43,9 +43,6 @@ builder.Services.AddSingleton<ClaudeService>();
 // ── Stripe ─────────────────────────────────────────────────────────────────
 builder.Services.AddSingleton<StripeService>();
 
-// ── Session store (in-memory for MVP) ──────────────────────────────────────
-builder.Services.AddSingleton<SessionStore>();
-
 // ── HttpClient ─────────────────────────────────────────────────────────────
 builder.Services.AddHttpClient();
 
