@@ -6,10 +6,16 @@ namespace Mogify.Api.Middleware;
 
 public class SupabaseAuthMiddleware
 {
-    private static readonly HashSet<string> _publicPrefixes =
+    private static readonly HashSet<string> _publicPaths =
     [
         "/health",
-        "/auth/",
+        "/auth/register",
+        "/auth/login",
+        "/auth/refresh",
+    ];
+
+    private static readonly HashSet<string> _publicPrefixes =
+    [
         "/universities",
     ];
 
@@ -25,7 +31,7 @@ public class SupabaseAuthMiddleware
     public async Task InvokeAsync(HttpContext context)
     {
         var path = context.Request.Path.Value?.ToLowerInvariant() ?? "";
-        var isPublic = _publicPrefixes.Any(p => path.StartsWith(p));
+        var isPublic = _publicPaths.Contains(path) || _publicPrefixes.Any(p => path.StartsWith(p));
 
         if (!isPublic)
         {
