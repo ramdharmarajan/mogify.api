@@ -1,3 +1,5 @@
+using Microsoft.IdentityModel.Protocols;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -21,11 +23,20 @@ public class SupabaseAuthMiddleware
 
     private readonly RequestDelegate _next;
     private readonly ILogger<SupabaseAuthMiddleware> _logger;
+    private readonly IConfigurationManager<OpenIdConnectConfiguration> _oidcConfig;
+    private readonly string _supabaseUrl;
 
-    public SupabaseAuthMiddleware(RequestDelegate next, ILogger<SupabaseAuthMiddleware> logger)
+    public SupabaseAuthMiddleware(RequestDelegate next, ILogger<SupabaseAuthMiddleware> logger, IConfiguration config)
     {
         _next = next;
         _logger = logger;
+        _supabaseUrl = config["SUPABASE_URL"]!.TrimEnd('/');
+
+        var metadataAddress = $"{_supabaseUrl}/auth/v1/.well-known/openid-configuration";
+        _oidcConfig = new ConfigurationManager<OpenIdConnectConfiguration>(
+            metadataAddress,
+            new OpenIdConnectConfigurationRetriever(),
+            new HttpDocumentRetriever());
     }
 
     public async Task InvokeAsync(HttpContext context)
@@ -44,7 +55,7 @@ public class SupabaseAuthMiddleware
             }
 
             var token = authHeader["Bearer ".Length..].Trim();
-            var principal = ValidateToken(token);
+            var principal = await ValidateTokenAsync(token);
 
             if (principal == null)
             {
@@ -59,21 +70,27 @@ public class SupabaseAuthMiddleware
         await _next(context);
     }
 
-    private ClaimsPrincipal? ValidateToken(string token)
+    private async Task<ClaimsPrincipal?> ValidateTokenAsync(string token)
     {
         try
         {
-            // Supabase JWTs are signed with the JWT secret (from project settings)
-            // For now we decode without verification for development; lock down before launch
+            var oidc = await _oidcConfig.GetConfigurationAsync(CancellationToken.None);
+
+            var validationParams = new TokenValidationParameters
+            {
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKeys = oidc.SigningKeys,
+                ValidateIssuer = true,
+                ValidIssuer = $"{_supabaseUrl}/auth/v1",
+                ValidateAudience = true,
+                ValidAudience = "authenticated",
+                ValidateLifetime = true,
+                ClockSkew = TimeSpan.FromSeconds(30)
+            };
+
             var handler = new JwtSecurityTokenHandler();
-            if (!handler.CanReadToken(token))
-                return null;
-
-            var jwt = handler.ReadJwtToken(token);
-
-            var claims = jwt.Claims.ToList();
-            var identity = new ClaimsIdentity(claims, "Supabase");
-            return new ClaimsPrincipal(identity);
+            handler.InboundClaimTypeMap.Clear();
+            return handler.ValidateToken(token, validationParams, out _);
         }
         catch (Exception ex)
         {

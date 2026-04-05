@@ -61,15 +61,21 @@ public class ShortlistController : ControllerBase
 
         var result = await _claude.GenerateShortlistAsync(request.Profile, universitiesData);
 
-        // Try to parse as JSON; return raw string if parsing fails
+        // Strip markdown code fences if Claude wraps the JSON
+        var json = result.Trim();
+        if (json.StartsWith("```"))
+        {
+            json = System.Text.RegularExpressions.Regex.Replace(json, @"^```[^\n]*\n?", "").TrimEnd('`').Trim();
+        }
+
         try
         {
-            var parsed = JsonSerializer.Deserialize<JsonElement>(result);
+            var parsed = JsonSerializer.Deserialize<JsonElement>(json);
             return Ok(new { shortlist = parsed, generated_at = DateTime.UtcNow });
         }
         catch
         {
-            return Ok(new { shortlist = result, generated_at = DateTime.UtcNow });
+            return Ok(new { shortlist = json, generated_at = DateTime.UtcNow });
         }
     }
 }
