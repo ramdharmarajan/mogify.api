@@ -7,7 +7,7 @@ namespace Mogify.Api.Models;
 public class Course : BaseModel
 {
     [PrimaryKey("id")]
-    public int Id { get; set; }
+    public string Id { get; set; } = string.Empty;
 
     [Column("university_slug")]
     public string UniversitySlug { get; set; } = string.Empty;

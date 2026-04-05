@@ -56,7 +56,7 @@ public class SupabaseService
         return result.Models;
     }
 
-    public async Task<Scholarship?> GetScholarshipAsync(int id)
+    public async Task<Scholarship?> GetScholarshipAsync(string id)
     {
         var result = await _client.From<Scholarship>()
             .Where(s => s.Id == id)

@@ -7,7 +7,7 @@ namespace Mogify.Api.Models;
 public class Scholarship : BaseModel
 {
     [PrimaryKey("id")]
-    public int Id { get; set; }
+    public string Id { get; set; } = string.Empty;
 
     [Column("name")]
     public string Name { get; set; } = string.Empty;

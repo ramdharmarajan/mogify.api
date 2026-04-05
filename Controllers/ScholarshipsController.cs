@@ -29,8 +29,8 @@ public class ScholarshipsController : ControllerBase
         return Ok(scholarships);
     }
 
-    [HttpGet("{id:int}")]
-    public async Task<IActionResult> GetById(int id)
+    [HttpGet("{id}")]
+    public async Task<IActionResult> GetById(string id)
     {
         var scholarship = await _supabase.GetScholarshipAsync(id);
         if (scholarship == null)
