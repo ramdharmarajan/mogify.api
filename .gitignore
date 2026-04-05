@@ -5,6 +5,7 @@ obj/
 *.suo
 .vs/
 .vscode/
+.claude/
 *.swp
 
 ## Secrets & environment
