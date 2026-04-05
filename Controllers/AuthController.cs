@@ -44,9 +44,10 @@ public class AuthController : ControllerBase
     [HttpGet("me")]
     public IActionResult Me()
     {
-        var userId = User.FindFirstValue("sub");
-        var email = User.FindFirstValue("email");
-        return Ok(new { id = userId, email });
+        var userId = User.Claims.FirstOrDefault(c => c.Type == "sub")?.Value;
+        var email = User.Claims.FirstOrDefault(c => c.Type == "email")?.Value;
+        var role = User.Claims.FirstOrDefault(c => c.Type == "role")?.Value;
+        return Ok(new { id = userId, email, role });
     }
 
     private async Task<IActionResult> ProxyToSupabase(string path, string json)
