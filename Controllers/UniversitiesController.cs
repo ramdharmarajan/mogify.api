@@ -19,8 +19,15 @@ public class UniversitiesController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> GetAll()
     {
-        var universities = await _supabase.GetUniversitiesAsync();
-        return Ok(universities);
+        try
+        {
+            var universities = await _supabase.GetUniversitiesAsync();
+            return Ok(universities);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = ex.Message, type = ex.GetType().Name });
+        }
     }
 
     [HttpGet("{slug}")]
