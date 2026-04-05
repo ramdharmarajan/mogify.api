@@ -56,6 +56,14 @@ var supabase = app.Services.GetRequiredService<Supabase.Client>();
 await supabase.InitializeAsync();
 
 // ── Middleware pipeline ────────────────────────────────────────────────────
+app.UseExceptionHandler(err => err.Run(async ctx =>
+{
+    var ex = ctx.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>()?.Error;
+    ctx.Response.StatusCode = 500;
+    ctx.Response.ContentType = "application/json";
+    await ctx.Response.WriteAsJsonAsync(new { error = ex?.Message, type = ex?.GetType().Name });
+}));
+app.UseRouting();
 app.UseCors();
 app.UseMiddleware<SupabaseAuthMiddleware>();
 app.MapControllers();
