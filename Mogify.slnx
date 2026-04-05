@@ -1,5 +1,3 @@
 <Solution>
-  <Folder Name="/src/">
-    <Project Path="src/Mogify.Api.csproj" />
-  </Folder>
+  <Project Path="Mogify.Api.csproj" />
 </Solution>
