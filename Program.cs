@@ -47,7 +47,8 @@ builder.Services.AddSingleton<StripeService>();
 builder.Services.AddSingleton<SessionStore>();
 
 // ── MVC ────────────────────────────────────────────────────────────────────
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddNewtonsoftJson();
 
 var app = builder.Build();
 
