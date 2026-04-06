@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Mogify.Api.Models;
 using Mogify.Api.Services;
-using System.Text.Json;
+using Newtonsoft.Json.Linq;
 
 namespace Mogify.Api.Controllers;
 
@@ -70,7 +70,7 @@ public class ShortlistController : ControllerBase
 
         try
         {
-            var parsed = JsonSerializer.Deserialize<JsonElement>(json);
+            var parsed = JToken.Parse(json);
             return Ok(new { shortlist = parsed, generated_at = DateTime.UtcNow });
         }
         catch
