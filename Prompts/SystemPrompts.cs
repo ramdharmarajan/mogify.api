@@ -22,13 +22,4 @@ public static class SystemPrompts
         Question bank for this session: {questionsJson}
         """;
 
-    public static string Shortlister(string profile, string universitiesJson) => $"""
-        You are a UK university admissions expert. Given a student profile and a list of
-        universities with their admissions intelligence, rank the universities by fit and
-        return a JSON array with fit_score (0-100), reasoning (2 sentences), and
-        recommendation_type (reach/match/safety) for each.
-        Student profile: {profile}
-        Universities: {universitiesJson}
-        Return only valid JSON, no explanation.
-        """;
 }

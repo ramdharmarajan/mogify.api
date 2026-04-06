@@ -1,5 +1,6 @@
 using Anthropic.SDK;
 using Anthropic.SDK.Messaging;
+using Mogify.Api.Controllers;
 using Mogify.Api.Models;
 using Mogify.Api.Prompts;
 using System.Text.Json;
@@ -16,21 +17,102 @@ public class ClaudeService
         _client = client;
     }
 
-    public async Task<string> GenerateShortlistAsync(StudentProfile profile, List<object> universitiesData)
+    public async Task<List<object>> EnhanceShortlistAsync(
+        List<ShortlistItem> shortlist,
+        string careerGoals,
+        string interests,
+        StudentProfile profile)
     {
-        var profileJson = JsonSerializer.Serialize(profile);
-        var universitiesJson = JsonSerializer.Serialize(universitiesData);
-        var systemPrompt = SystemPrompts.Shortlister(profileJson, universitiesJson);
+        var universitiesList = string.Join("\n", shortlist.Select((u, i) =>
+            $"{i + 1}. {u.Name} (slug: {u.Slug}, current fit score: {u.FitScore}, type: {u.RecommendationType}, offer: {u.TypicalOffer})"));
+
+        var systemPrompt = $"""
+            You are a UK university admissions expert helping a student find their best-fit universities.
+            The student's grades and location have already been used to produce an initial ranked list.
+            Your job is to rewrite the reasoning for each university to explain specifically how it
+            connects to the student's career goals and interests. Be concrete and specific — name
+            actual programmes, societies, alumni outcomes, or research strengths that align with
+            what the student wants to do. Keep each reasoning to 2 sentences maximum.
+            Also adjust fit_score by up to ±10 if the career goals strongly align or clash with
+            what that university is known for.
+
+            Student profile:
+            - Predicted grades: {profile.PredictedGrades}
+            - Subject: {profile.TargetSubject}
+            - Career goals: {careerGoals}
+            - Interests: {interests}
+
+            Return a JSON array with one object per university in the same order, each with:
+            slug, fit_score (adjusted), reasoning (career-personalised).
+            Return only valid JSON, no explanation.
+            """;
+
+        var userMsg = $"Universities to personalise:\n{universitiesList}";
 
         var response = await _client.Messages.GetClaudeMessageAsync(new MessageParameters
         {
             Model = Model,
-            MaxTokens = 2000,
+            MaxTokens = 1500,
             System = [new SystemMessage(systemPrompt)],
-            Messages = [new Message(RoleType.User, "Generate the university shortlist.")]
+            Messages = [new Message(RoleType.User, userMsg)]
         });
 
-        return response.Message.ToString();
+        var json = response.Message.ToString().Trim();
+        if (json.StartsWith("```"))
+            json = System.Text.RegularExpressions.Regex.Replace(json, @"^```[^\n]*\n?", "").TrimEnd('`').Trim();
+
+        try
+        {
+            var enhancements = Newtonsoft.Json.JsonConvert.DeserializeObject<List<dynamic>>(json)!;
+            var enhancementBySlug = enhancements.ToDictionary(
+                e => (string)e.slug,
+                e => e);
+
+            return shortlist.Select(u =>
+            {
+                if (enhancementBySlug.TryGetValue(u.Slug, out var enhancement))
+                {
+                    return (object)new
+                    {
+                        slug               = u.Slug,
+                        name               = u.Name,
+                        location           = u.Location,
+                        fit_score          = (int)enhancement.fit_score,
+                        recommendation_type = u.RecommendationType,
+                        reasoning          = (string)enhancement.reasoning,
+                        typical_offer      = u.TypicalOffer,
+                        admissions_test    = u.AdmissionsTest
+                    };
+                }
+                // Fall back to original if Claude didn't return this university
+                return (object)new
+                {
+                    slug               = u.Slug,
+                    name               = u.Name,
+                    location           = u.Location,
+                    fit_score          = u.FitScore,
+                    recommendation_type = u.RecommendationType,
+                    reasoning          = u.Reasoning,
+                    typical_offer      = u.TypicalOffer,
+                    admissions_test    = u.AdmissionsTest
+                };
+            }).ToList();
+        }
+        catch
+        {
+            // If Claude returns bad JSON, return original list untouched
+            return shortlist.Select(u => (object)new
+            {
+                slug               = u.Slug,
+                name               = u.Name,
+                location           = u.Location,
+                fit_score          = u.FitScore,
+                recommendation_type = u.RecommendationType,
+                reasoning          = u.Reasoning,
+                typical_offer      = u.TypicalOffer,
+                admissions_test    = u.AdmissionsTest
+            }).ToList();
+        }
     }
 
     public async Task<string> SendPsCoachMessageAsync(
