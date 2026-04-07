@@ -70,7 +70,7 @@ public class ShortlistController : ControllerBase
                     _     => 5
                 };
 
-                var locationBonus    = MatchesLocation(u.Location, request.Profile.LocationPreference) ? 10 : 0;
+                var locationBonus    = MatchesLocation(u.Location, request.Profile.LocationPreference) ? 20 : 0;
                 var contextualBonus  = (isStateSchool && u.ContextualAdmissions == true) ? 8 : 0;
                 var acceptanceBonus  = u.AcceptanceRate.HasValue ? (int)(u.AcceptanceRate.Value / 10) : 5;
                 var fitScore         = Math.Min(98, gradeAlignment + locationBonus + contextualBonus + acceptanceBonus);
@@ -136,13 +136,138 @@ public class ShortlistController : ControllerBase
         };
     }
 
+    // Maps city/county names (as stored in DB) → frontend dropdown region labels.
+    // Covers cities, counties, and common DB variants (e.g. "West Yorkshire", "Tyne and Wear").
+    private static readonly Dictionary<string, string> _cityToRegion = new(StringComparer.OrdinalIgnoreCase)
+    {
+        // ── Scotland ──────────────────────────────────────────────────────────
+        ["Edinburgh"]       = "Scotland",
+        ["Glasgow"]         = "Scotland",
+        ["Aberdeen"]        = "Scotland",
+        ["St Andrews"]      = "Scotland",
+        ["Dundee"]          = "Scotland",
+        ["Stirling"]        = "Scotland",
+        ["Inverness"]       = "Scotland",
+        ["Perth"]           = "Scotland",
+        ["Strathclyde"]     = "Scotland",
+        ["Heriot-Watt"]     = "Scotland",
+
+        // ── London ────────────────────────────────────────────────────────────
+        ["London"]          = "London",
+        ["Egham"]           = "London",   // Royal Holloway
+        ["Uxbridge"]        = "London",   // Brunel
+
+        // ── South East ────────────────────────────────────────────────────────
+        ["Oxford"]          = "South East",
+        ["Cambridge"]       = "South East",
+        ["Brighton"]        = "South East",
+        ["Hove"]            = "South East",
+        ["Southampton"]     = "South East",
+        ["Portsmouth"]      = "South East",
+        ["Reading"]         = "South East",
+        ["Canterbury"]      = "South East",
+        ["Guildford"]       = "South East",
+        ["Surrey"]          = "South East",
+        ["Kent"]            = "South East",
+        ["Sussex"]          = "South East",
+        ["Hampshire"]       = "South East",
+        ["Chichester"]      = "South East",
+        ["Winchester"]      = "South East",
+        ["Buckinghamshire"] = "South East",
+        ["Milton Keynes"]   = "South East",
+        ["Hertfordshire"]   = "South East",
+        ["Hatfield"]        = "South East",
+        ["Essex"]           = "South East",
+        ["Colchester"]      = "South East",
+        ["Chelmsford"]      = "South East",
+        ["Norwich"]         = "South East",
+        ["Norfolk"]         = "South East",
+        // South West — no dropdown option, map to South East as nearest
+        ["Bristol"]         = "South East",
+        ["Bath"]            = "South East",
+        ["Exeter"]          = "South East",
+        ["Plymouth"]        = "South East",
+        ["Falmouth"]        = "South East",
+        ["Cornwall"]        = "South East",
+        ["Devon"]           = "South East",
+        ["Somerset"]        = "South East",
+        ["Gloucestershire"] = "South East",
+        ["Cheltenham"]      = "South East",
+        ["Bournemouth"]     = "South East",
+        ["Dorset"]          = "South East",
+
+        // ── Midlands ──────────────────────────────────────────────────────────
+        ["Birmingham"]      = "Midlands",
+        ["Nottingham"]      = "Midlands",
+        ["Leicester"]       = "Midlands",
+        ["Coventry"]        = "Midlands",
+        ["Warwick"]         = "Midlands",
+        ["Derby"]           = "Midlands",
+        ["Lincoln"]         = "Midlands",
+        ["Keele"]           = "Midlands",
+        ["Staffordshire"]   = "Midlands",
+        ["Stoke"]           = "Midlands",
+        ["Worcester"]       = "Midlands",
+        ["Wolverhampton"]   = "Midlands",
+        ["Northampton"]     = "Midlands",
+        ["West Midlands"]   = "Midlands",
+        ["East Midlands"]   = "Midlands",
+        ["Loughborough"]    = "Midlands",
+        ["Aston"]           = "Midlands",
+        ["De Montfort"]     = "Midlands",
+
+        // ── North ─────────────────────────────────────────────────────────────
+        ["Manchester"]      = "North",
+        ["Leeds"]           = "North",
+        ["Sheffield"]       = "North",
+        ["Liverpool"]       = "North",
+        ["Newcastle"]       = "North",
+        ["York"]            = "North",
+        ["Durham"]          = "North",
+        ["Lancaster"]       = "North",
+        ["Hull"]            = "North",
+        ["Sunderland"]      = "North",
+        ["Middlesbrough"]   = "North",
+        ["Teesside"]        = "North",
+        ["Chester"]         = "North",
+        ["Huddersfield"]    = "North",
+        ["Bradford"]        = "North",
+        ["Salford"]         = "North",
+        ["Bolton"]          = "North",
+        ["Preston"]         = "North",
+        ["Northumbria"]     = "North",
+        ["Carlisle"]        = "North",
+        ["Cumbria"]         = "North",
+        ["Yorkshire"]       = "North",
+        ["West Yorkshire"]  = "North",
+        ["South Yorkshire"] = "North",
+        ["North Yorkshire"] = "North",
+        ["East Yorkshire"]  = "North",
+        ["Lancashire"]      = "North",
+        ["Merseyside"]      = "North",
+        ["Tyne and Wear"]   = "North",
+        ["Tyne"]            = "North",
+        ["Wear"]            = "North",
+        ["Cheshire"]        = "North",
+        ["Humberside"]      = "North",
+    };
+
     private static bool MatchesLocation(string? uniLocation, string? preference)
     {
         if (string.IsNullOrWhiteSpace(preference) || preference.Equals("no preference", StringComparison.OrdinalIgnoreCase))
             return true;
         if (string.IsNullOrWhiteSpace(uniLocation)) return false;
-        return uniLocation.Contains(preference, StringComparison.OrdinalIgnoreCase)
-            || preference.Contains(uniLocation, StringComparison.OrdinalIgnoreCase);
+
+        // Direct match (e.g. DB stores "London" and preference is "London")
+        if (uniLocation.Contains(preference, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        // Map city → region and compare (e.g. DB stores "Edinburgh", preference is "Scotland")
+        var city = _cityToRegion.Keys.FirstOrDefault(c => uniLocation.Contains(c, StringComparison.OrdinalIgnoreCase));
+        if (city != null && _cityToRegion.TryGetValue(city, out var region))
+            return region.Equals(preference, StringComparison.OrdinalIgnoreCase);
+
+        return false;
     }
 }
 
