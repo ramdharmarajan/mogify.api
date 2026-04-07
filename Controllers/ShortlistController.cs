@@ -70,7 +70,7 @@ public class ShortlistController : ControllerBase
                     _     => 5
                 };
 
-                var locationBonus    = MatchesLocation(u.Location, request.Profile.LocationPreference) ? 20 : 0;
+                var locationBonus    = MatchesLocation(u.Slug, request.Profile.LocationPreference) ? 20 : 0;
                 var contextualBonus  = (isStateSchool && u.ContextualAdmissions == true) ? 8 : 0;
                 var acceptanceBonus  = u.AcceptanceRate.HasValue ? (int)(u.AcceptanceRate.Value / 10) : 5;
                 var fitScore         = Math.Min(98, gradeAlignment + locationBonus + contextualBonus + acceptanceBonus);
@@ -136,136 +136,139 @@ public class ShortlistController : ControllerBase
         };
     }
 
-    // Maps city/county names (as stored in DB) → frontend dropdown region labels.
-    // Covers cities, counties, and common DB variants (e.g. "West Yorkshire", "Tyne and Wear").
-    private static readonly Dictionary<string, string> _cityToRegion = new(StringComparer.OrdinalIgnoreCase)
+    // Maps university slug → region label.
+    // The DB location column only stores "London" or "Regional" — not city names —
+    // so we match on slug which is stable and consistent.
+    private static readonly Dictionary<string, string> _slugToRegion = new(StringComparer.OrdinalIgnoreCase)
     {
         // ── Scotland ──────────────────────────────────────────────────────────
-        ["Edinburgh"]       = "Scotland",
-        ["Glasgow"]         = "Scotland",
-        ["Aberdeen"]        = "Scotland",
-        ["St Andrews"]      = "Scotland",
-        ["Dundee"]          = "Scotland",
-        ["Stirling"]        = "Scotland",
-        ["Inverness"]       = "Scotland",
-        ["Perth"]           = "Scotland",
-        ["Strathclyde"]     = "Scotland",
-        ["Heriot-Watt"]     = "Scotland",
+        ["edinburgh"]        = "Scotland",
+        ["glasgow"]          = "Scotland",
+        ["aberdeen"]         = "Scotland",
+        ["st-andrews"]       = "Scotland",
+        ["dundee"]           = "Scotland",
+        ["stirling"]         = "Scotland",
+        ["strathclyde"]      = "Scotland",
+        ["heriot-watt"]      = "Scotland",
+        ["napier"]           = "Scotland",
+        ["caledonian"]       = "Scotland",
+        ["rgu"]              = "Scotland",
+        ["robert-gordon"]    = "Scotland",
+        ["highlands"]        = "Scotland",
 
         // ── London ────────────────────────────────────────────────────────────
-        ["London"]          = "London",
-        ["Egham"]           = "London",   // Royal Holloway
-        ["Uxbridge"]        = "London",   // Brunel
+        ["ucl"]              = "London",
+        ["kcl"]              = "London",
+        ["lse"]              = "London",
+        ["imperial"]         = "London",
+        ["qmul"]             = "London",
+        ["queen-mary"]       = "London",
+        ["city"]             = "London",
+        ["goldsmiths"]       = "London",
+        ["brunel"]           = "London",
+        ["royal-holloway"]   = "London",
+        ["soas"]             = "London",
+        ["birkbeck"]         = "London",
+        ["westminster"]      = "London",
+        ["middlesex"]        = "London",
+        ["london-met"]       = "London",
+        ["roehampton"]       = "London",
+        ["kingston"]         = "London",
+        ["st-georges"]       = "London",
+        ["arts-london"]      = "London",
 
         // ── South East ────────────────────────────────────────────────────────
-        ["Oxford"]          = "South East",
-        ["Cambridge"]       = "South East",
-        ["Brighton"]        = "South East",
-        ["Hove"]            = "South East",
-        ["Southampton"]     = "South East",
-        ["Portsmouth"]      = "South East",
-        ["Reading"]         = "South East",
-        ["Canterbury"]      = "South East",
-        ["Guildford"]       = "South East",
-        ["Surrey"]          = "South East",
-        ["Kent"]            = "South East",
-        ["Sussex"]          = "South East",
-        ["Hampshire"]       = "South East",
-        ["Chichester"]      = "South East",
-        ["Winchester"]      = "South East",
-        ["Buckinghamshire"] = "South East",
-        ["Milton Keynes"]   = "South East",
-        ["Hertfordshire"]   = "South East",
-        ["Hatfield"]        = "South East",
-        ["Essex"]           = "South East",
-        ["Colchester"]      = "South East",
-        ["Chelmsford"]      = "South East",
-        ["Norwich"]         = "South East",
-        ["Norfolk"]         = "South East",
-        // South West — no dropdown option, map to South East as nearest
-        ["Bristol"]         = "South East",
-        ["Bath"]            = "South East",
-        ["Exeter"]          = "South East",
-        ["Plymouth"]        = "South East",
-        ["Falmouth"]        = "South East",
-        ["Cornwall"]        = "South East",
-        ["Devon"]           = "South East",
-        ["Somerset"]        = "South East",
-        ["Gloucestershire"] = "South East",
-        ["Cheltenham"]      = "South East",
-        ["Bournemouth"]     = "South East",
-        ["Dorset"]          = "South East",
+        ["oxford"]           = "South East",
+        ["cambridge"]        = "South East",
+        ["southampton"]      = "South East",
+        ["sussex"]           = "South East",
+        ["kent"]             = "South East",
+        ["surrey"]           = "South East",
+        ["reading"]          = "South East",
+        ["portsmouth"]       = "South East",
+        ["brighton"]         = "South East",
+        ["chichester"]       = "South East",
+        ["winchester"]       = "South East",
+        ["uea"]              = "South East",
+        ["east-anglia"]      = "South East",
+        ["anglia-ruskin"]    = "South East",
+        ["hertfordshire"]    = "South East",
+        ["bedfordshire"]     = "South East",
+        ["buckinghamshire"]  = "South East",
+        ["essex"]            = "South East",
+        // South West → South East (no South West dropdown option)
+        ["exeter"]           = "South East",
+        ["bristol"]          = "South East",
+        ["bath"]             = "South East",
+        ["plymouth"]         = "South East",
+        ["falmouth"]         = "South East",
+        ["gloucestershire"]  = "South East",
+        ["uwe"]              = "South East",
+        ["bournemouth"]      = "South East",
 
         // ── Midlands ──────────────────────────────────────────────────────────
-        ["Birmingham"]      = "Midlands",
-        ["Nottingham"]      = "Midlands",
-        ["Leicester"]       = "Midlands",
-        ["Coventry"]        = "Midlands",
-        ["Warwick"]         = "Midlands",
-        ["Derby"]           = "Midlands",
-        ["Lincoln"]         = "Midlands",
-        ["Keele"]           = "Midlands",
-        ["Staffordshire"]   = "Midlands",
-        ["Stoke"]           = "Midlands",
-        ["Worcester"]       = "Midlands",
-        ["Wolverhampton"]   = "Midlands",
-        ["Northampton"]     = "Midlands",
-        ["West Midlands"]   = "Midlands",
-        ["East Midlands"]   = "Midlands",
-        ["Loughborough"]    = "Midlands",
-        ["Aston"]           = "Midlands",
-        ["De Montfort"]     = "Midlands",
+        ["birmingham"]       = "Midlands",
+        ["nottingham"]       = "Midlands",
+        ["leicester"]        = "Midlands",
+        ["coventry"]         = "Midlands",
+        ["warwick"]          = "Midlands",
+        ["derby"]            = "Midlands",
+        ["lincoln"]          = "Midlands",
+        ["keele"]            = "Midlands",
+        ["staffordshire"]    = "Midlands",
+        ["worcester"]        = "Midlands",
+        ["wolverhampton"]    = "Midlands",
+        ["northampton"]      = "Midlands",
+        ["loughborough"]     = "Midlands",
+        ["aston"]            = "Midlands",
+        ["dmu"]              = "Midlands",
+        ["ntu"]              = "Midlands",
+        ["nottingham-trent"] = "Midlands",
+        ["de-montfort"]      = "Midlands",
 
         // ── North ─────────────────────────────────────────────────────────────
-        ["Manchester"]      = "North",
-        ["Leeds"]           = "North",
-        ["Sheffield"]       = "North",
-        ["Liverpool"]       = "North",
-        ["Newcastle"]       = "North",
-        ["York"]            = "North",
-        ["Durham"]          = "North",
-        ["Lancaster"]       = "North",
-        ["Hull"]            = "North",
-        ["Sunderland"]      = "North",
-        ["Middlesbrough"]   = "North",
-        ["Teesside"]        = "North",
-        ["Chester"]         = "North",
-        ["Huddersfield"]    = "North",
-        ["Bradford"]        = "North",
-        ["Salford"]         = "North",
-        ["Bolton"]          = "North",
-        ["Preston"]         = "North",
-        ["Northumbria"]     = "North",
-        ["Carlisle"]        = "North",
-        ["Cumbria"]         = "North",
-        ["Yorkshire"]       = "North",
-        ["West Yorkshire"]  = "North",
-        ["South Yorkshire"] = "North",
-        ["North Yorkshire"] = "North",
-        ["East Yorkshire"]  = "North",
-        ["Lancashire"]      = "North",
-        ["Merseyside"]      = "North",
-        ["Tyne and Wear"]   = "North",
-        ["Tyne"]            = "North",
-        ["Wear"]            = "North",
-        ["Cheshire"]        = "North",
-        ["Humberside"]      = "North",
+        ["manchester"]       = "North",
+        ["leeds"]            = "North",
+        ["sheffield"]        = "North",
+        ["liverpool"]        = "North",
+        ["newcastle"]        = "North",
+        ["york"]             = "North",
+        ["durham"]           = "North",
+        ["lancaster"]        = "North",
+        ["hull"]             = "North",
+        ["sunderland"]       = "North",
+        ["teesside"]         = "North",
+        ["chester"]          = "North",
+        ["huddersfield"]     = "North",
+        ["bradford"]         = "North",
+        ["salford"]          = "North",
+        ["bolton"]           = "North",
+        ["uclan"]            = "North",
+        ["northumbria"]      = "North",
+        ["edge-hill"]        = "North",
+        ["manchester-met"]   = "North",
+        ["mmu"]              = "North",
+        ["leeds-beckett"]    = "North",
+        ["sheffield-hallam"] = "North",
+        ["liverpool-hope"]   = "North",
+        ["ljmu"]             = "North",
+        ["cumbria"]          = "North",
     };
 
-    private static bool MatchesLocation(string? uniLocation, string? preference)
+    private static bool MatchesLocation(string? slug, string? preference)
     {
         if (string.IsNullOrWhiteSpace(preference) || preference.Equals("no preference", StringComparison.OrdinalIgnoreCase))
             return true;
-        if (string.IsNullOrWhiteSpace(uniLocation)) return false;
+        if (string.IsNullOrWhiteSpace(slug)) return false;
 
-        // Direct match (e.g. DB stores "London" and preference is "London")
-        if (uniLocation.Contains(preference, StringComparison.OrdinalIgnoreCase))
-            return true;
-
-        // Map city → region and compare (e.g. DB stores "Edinburgh", preference is "Scotland")
-        var city = _cityToRegion.Keys.FirstOrDefault(c => uniLocation.Contains(c, StringComparison.OrdinalIgnoreCase));
-        if (city != null && _cityToRegion.TryGetValue(city, out var region))
+        // Look up slug directly first
+        if (_slugToRegion.TryGetValue(slug, out var region))
             return region.Equals(preference, StringComparison.OrdinalIgnoreCase);
+
+        // Partial slug match (e.g. "university-of-edinburgh" contains "edinburgh")
+        var match = _slugToRegion.Keys.FirstOrDefault(k => slug.Contains(k, StringComparison.OrdinalIgnoreCase));
+        if (match != null)
+            return _slugToRegion[match].Equals(preference, StringComparison.OrdinalIgnoreCase);
 
         return false;
     }
