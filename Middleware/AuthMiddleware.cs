@@ -19,6 +19,7 @@ public class SupabaseAuthMiddleware
     private static readonly HashSet<string> _publicPrefixes =
     [
         "/universities",
+        "/interview/questions",
     ];
 
     private readonly RequestDelegate _next;

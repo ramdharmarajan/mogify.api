@@ -21,11 +21,16 @@ public class InterviewController : ControllerBase
     private string GetUserId() =>
         User.Claims.FirstOrDefault(c => c.Type == "sub")?.Value ?? "anonymous";
 
+    // Trimmed projection — strong_approach / common_mistakes are the paid
+    // product's model answers and must not reach the browser during practice.
+    private static object ToClientQuestion(InterviewQuestion q) =>
+        new { q.Id, q.Question, q.Type, q.Difficulty, q.WhatIsBeingTested };
+
     [HttpGet("questions/{universitySlug}/{subject}")]
     public async Task<IActionResult> GetQuestions(string universitySlug, string subject)
     {
         var questions = await _supabase.GetInterviewQuestionsAsync(universitySlug, subject);
-        return Ok(questions);
+        return Ok(questions.Select(ToClientQuestion));
     }
 
     [HttpPost("sessions")]
@@ -40,18 +45,14 @@ public class InterviewController : ControllerBase
         var session = await _supabase.CreateInterviewSessionAsync(userId, request.UniversitySlug, request.Subject);
         var course = await _supabase.GetCourseAsync(request.UniversitySlug, request.Subject);
 
-        var rng = new Random();
-        var firstQuestion = questions[rng.Next(questions.Count)];
-        session.Turns.Add(new InterviewTurn { Question = firstQuestion.Question });
-        await _supabase.SaveInterviewTurnsAsync(session.Id, session.Turns);
-
+        // The client drives the question sequence and answers with question_id;
+        // turns are recorded as answers arrive.
         return CreatedAtAction(nameof(GetSession), new { id = session.Id }, new
         {
             session.Id,
             session.CreatedAt,
             interview_format = course?.InterviewFormat ?? "Panel",
-            first_question = firstQuestion.Question,
-            question_type = firstQuestion.Type
+            questions = questions.Select(ToClientQuestion)
         });
     }
 
@@ -78,36 +79,59 @@ public class InterviewController : ControllerBase
         if (session.UserId != GetUserId())
             return Forbid();
 
-        var currentTurn = session.Turns.LastOrDefault(t => t.Answer == null);
-        if (currentTurn == null)
-            return BadRequest(new { error = "No pending question in this session." });
+        if (string.IsNullOrWhiteSpace(request.Answer))
+            return BadRequest(new { error = "answer is required." });
 
         var questions = await _supabase.GetInterviewQuestionsAsync(session.UniversitySlug, session.Subject);
         var course = await _supabase.GetCourseAsync(session.UniversitySlug, session.Subject);
 
+        // The client says which question it asked; grade the answer against that
+        // question, not a server-picked one. Fall back to the legacy pending-turn
+        // flow for sessions created before this change.
+        string questionText;
+        var legacyPendingTurn = session.Turns.LastOrDefault(t => t.Answer == null);
+        if (!string.IsNullOrWhiteSpace(request.QuestionId))
+        {
+            var question = questions.FirstOrDefault(q => q.Id == request.QuestionId);
+            if (question == null)
+                return BadRequest(new { error = "question_id not found for this session's university and subject." });
+            questionText = question.Question;
+        }
+        else if (legacyPendingTurn != null)
+        {
+            questionText = legacyPendingTurn.Question;
+        }
+        else
+        {
+            return BadRequest(new { error = "question_id is required." });
+        }
+
         var feedback = await _claude.GetInterviewFeedbackAsync(
             session.UniversitySlug, session.Subject,
             course?.InterviewFormat ?? "Panel",
-            questions, currentTurn.Question, request.Answer);
+            questions, questionText, request.Answer);
+        var score = ExtractScore(feedback);
 
-        currentTurn.Answer = request.Answer;
-        currentTurn.Feedback = feedback;
-        currentTurn.Score = ExtractScore(feedback);
-
-        string? nextQuestion = null;
-        var answered = session.Turns.Where(t => t.Answer != null).Select(t => t.Question).ToHashSet();
-        var unanswered = questions.Where(q => !answered.Contains(q.Question)).ToList();
-
-        if (unanswered.Count > 0 && session.Turns.Count < 5)
+        if (!string.IsNullOrWhiteSpace(request.QuestionId))
         {
-            var next = unanswered[new Random().Next(unanswered.Count)];
-            session.Turns.Add(new InterviewTurn { Question = next.Question });
-            nextQuestion = next.Question;
+            session.Turns.Add(new InterviewTurn
+            {
+                Question = questionText,
+                Answer = request.Answer,
+                Feedback = feedback,
+                Score = score
+            });
+        }
+        else
+        {
+            legacyPendingTurn!.Answer = request.Answer;
+            legacyPendingTurn.Feedback = feedback;
+            legacyPendingTurn.Score = score;
         }
 
         await _supabase.SaveInterviewTurnsAsync(id, session.Turns);
 
-        return Ok(new { feedback, score = currentTurn.Score, next_question = nextQuestion });
+        return Ok(new { feedback, score });
     }
 
     [HttpGet("sessions/{id}/summary")]
@@ -121,13 +145,17 @@ public class InterviewController : ControllerBase
             return Forbid();
 
         var summary = await _claude.GetInterviewSessionSummaryAsync(session);
-        var avgScore = session.Turns
-            .Where(t => t.Score.HasValue)
-            .Select(t => t.Score!.Value)
-            .DefaultIfEmpty(0)
-            .Average();
+        var answered = session.Turns.Where(t => t.Answer != null).ToList();
+        var totalScore = answered.Sum(t => t.Score ?? 0);
 
-        return Ok(new { summary, average_score = Math.Round(avgScore, 1), questions_answered = session.Turns.Count(t => t.Answer != null) });
+        return Ok(new
+        {
+            total_score = totalScore,
+            feedback = summary.Feedback,
+            strengths = summary.Strengths,
+            improvements = summary.Improvements,
+            questions_answered = answered.Count
+        });
     }
 
     private static int? ExtractScore(string feedback)
@@ -138,4 +166,4 @@ public class InterviewController : ControllerBase
 }
 
 public record CreateInterviewSessionRequest(string UniversitySlug, string Subject);
-public record SubmitAnswerRequest(string Answer);
+public record SubmitAnswerRequest(string Answer, string? QuestionId);

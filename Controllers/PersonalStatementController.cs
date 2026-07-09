@@ -30,8 +30,7 @@ public class PersonalStatementController : ControllerBase
         {
             s.Id,
             s.CreatedAt,
-            message_count = s.Messages.Count,
-            last_message = s.Messages.LastOrDefault()?.Content?[..Math.Min(100, s.Messages.LastOrDefault()?.Content.Length ?? 0)]
+            messages = s.Messages
         }));
     }
 
@@ -40,7 +39,8 @@ public class PersonalStatementController : ControllerBase
     {
         var userId = GetUserId();
         var session = await _supabase.CreatePsSessionAsync(userId);
-        return CreatedAtAction(nameof(GetSession), new { id = session.Id }, new { session.Id, session.CreatedAt });
+        return CreatedAtAction(nameof(GetSession), new { id = session.Id },
+            new { session.Id, session.CreatedAt, messages = session.Messages });
     }
 
     [HttpGet("sessions/{id}")]
@@ -73,11 +73,12 @@ public class PersonalStatementController : ControllerBase
         var targetUniversities = request.TargetUniversities ?? [];
         var assistantText = await _claude.SendPsCoachMessageAsync(profile, targetUniversities, session.Messages, request.Message);
 
+        var assistantMessage = new PsMessage { Role = "assistant", Content = assistantText };
         session.Messages.Add(new PsMessage { Role = "user", Content = request.Message });
-        session.Messages.Add(new PsMessage { Role = "assistant", Content = assistantText });
+        session.Messages.Add(assistantMessage);
         await _supabase.SavePsSessionMessagesAsync(id, session.Messages);
 
-        return Ok(new { response = assistantText });
+        return Ok(assistantMessage);
     }
 
     [HttpPost("draft/generate")]
@@ -93,16 +94,19 @@ public class PersonalStatementController : ControllerBase
         return Ok(new { draft, generated_at = DateTime.UtcNow });
     }
 
-    [HttpGet("draft/feedback")]
-    public async Task<IActionResult> GetFeedback([FromQuery] string draft)
+    // POST body rather than query string — drafts run to 4,000 characters,
+    // which risks blowing the request-line length limit as a URL.
+    [HttpPost("draft/feedback")]
+    public async Task<IActionResult> GetFeedback([FromBody] DraftFeedbackRequest request)
     {
-        if (string.IsNullOrWhiteSpace(draft))
-            return BadRequest(new { error = "draft query parameter is required." });
+        if (string.IsNullOrWhiteSpace(request.Draft))
+            return BadRequest(new { error = "draft is required." });
 
-        var feedback = await _claude.GetPsFeedbackAsync(draft);
+        var feedback = await _claude.GetPsFeedbackAsync(request.Draft);
         return Ok(new { feedback });
     }
 }
 
 public record PsMessageRequest(string Message, StudentProfile? Profile, List<string>? TargetUniversities);
 public record GenerateDraftRequest(StudentProfile? Profile);
+public record DraftFeedbackRequest(string Draft);

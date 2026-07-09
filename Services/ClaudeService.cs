@@ -221,12 +221,20 @@ public class ClaudeService
         return response.Message.ToString();
     }
 
-    public async Task<string> GetInterviewSessionSummaryAsync(InterviewSession session)
+    public async Task<InterviewSummary> GetInterviewSessionSummaryAsync(InterviewSession session)
     {
         var turns = session.Turns.Where(t => t.Answer != null).ToList();
         var avgScore = turns.Where(t => t.Score.HasValue).Select(t => t.Score!.Value).DefaultIfEmpty(0).Average();
 
-        var systemPrompt = "You are an expert interview coach. Summarise this mock interview session with overall performance, key strengths, and top 3 areas to improve.";
+        var systemPrompt = """
+            You are an expert interview coach. Summarise this mock interview session.
+            Return ONLY valid JSON — no markdown fences, no explanation — in this exact structure:
+            {
+              "feedback": "2-3 sentence overall performance summary",
+              "strengths": ["strength 1", "strength 2", "strength 3"],
+              "improvements": ["area to improve 1", "area to improve 2", "area to improve 3"]
+            }
+            """;
 
         var content = string.Join("\n\n", turns.Select(t =>
             $"Q: {t.Question}\nA: {t.Answer}\nFeedback: {t.Feedback}\nScore: {t.Score}/10"));
@@ -241,6 +249,25 @@ public class ClaudeService
             Messages = [new Message(RoleType.User, userMsg)]
         });
 
-        return response.Message.ToString();
+        var raw = response.Message.ToString().Trim();
+        if (raw.StartsWith("```"))
+            raw = System.Text.RegularExpressions.Regex.Replace(raw, @"^```[^\n]*\n?", "").TrimEnd('`').Trim();
+
+        try
+        {
+            var parsed = Newtonsoft.Json.JsonConvert.DeserializeObject<InterviewSummary>(raw);
+            if (parsed != null && !string.IsNullOrWhiteSpace(parsed.Feedback))
+                return parsed with
+                {
+                    Strengths = parsed.Strengths ?? [],
+                    Improvements = parsed.Improvements ?? []
+                };
+        }
+        catch (Newtonsoft.Json.JsonException) { }
+
+        // Claude ignored the JSON instruction — degrade to plain-text feedback
+        return new InterviewSummary(raw, [], []);
     }
 }
+
+public record InterviewSummary(string Feedback, List<string> Strengths, List<string> Improvements);

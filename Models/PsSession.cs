@@ -25,6 +25,6 @@ public class PsMessage
     [JsonProperty("content")]
     public string Content { get; set; } = string.Empty;
 
-    [JsonProperty("timestamp")]
-    public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+    [JsonProperty("created_at")]
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

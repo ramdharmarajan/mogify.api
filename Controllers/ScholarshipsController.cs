@@ -22,9 +22,16 @@ public class ScholarshipsController : ControllerBase
         var scholarships = await _supabase.GetScholarshipsAsync();
 
         if (!string.IsNullOrWhiteSpace(subject))
+        {
+            // UI sends "computer science"; the database stores subject keys like
+            // "computer_science", plus "all" for scheme-wide scholarships.
+            var normalized = subject.Trim().ToLowerInvariant().Replace(' ', '_');
             scholarships = scholarships
-                .Where(s => s.Subjects?.Any(sub => sub.Equals(subject, StringComparison.OrdinalIgnoreCase)) == true)
+                .Where(s => s.Subjects?.Any(sub =>
+                    sub.Equals("all", StringComparison.OrdinalIgnoreCase) ||
+                    sub.Equals(normalized, StringComparison.OrdinalIgnoreCase)) == true)
                 .ToList();
+        }
 
         return Ok(scholarships);
     }

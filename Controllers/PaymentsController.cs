@@ -78,9 +78,19 @@ public class PaymentsController : ControllerBase
     [HttpGet("status")]
     public IActionResult GetStatus()
     {
-        // TODO: read tier from Supabase user metadata
-        return Ok(new { tier = "free", valid_until = (DateTime?)null });
+        // TODO: read stored tier from Supabase user metadata once the webhook persists it
+        var storedTier = "free";
+        return Ok(new { tier = TierDisplayName(storedTier), valid_until = (DateTime?)null });
     }
+
+    // Stripe metadata stores canonical lowercase tiers; the UI compares and
+    // displays "Free" / "Pro" / "Premium".
+    private static string TierDisplayName(string tier) => tier switch
+    {
+        "applicant" => "Pro",
+        "premium"   => "Premium",
+        _           => "Free"
+    };
 }
 
 public record CreateCheckoutRequest(string Tier);

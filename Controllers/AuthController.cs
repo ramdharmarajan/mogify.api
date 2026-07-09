@@ -62,7 +62,23 @@ public class AuthController : ControllerBase
         var response = await _http.SendAsync(req);
         var body = await response.Content.ReadAsStringAsync();
 
+        if (!response.IsSuccessStatusCode)
+            return StatusCode((int)response.StatusCode, new { error = ExtractSupabaseError(body) });
+
         return Content(body, "application/json", Encoding.UTF8);
+    }
+
+    private static string ExtractSupabaseError(string body)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            foreach (var key in new[] { "msg", "message", "error_description", "error" })
+                if (doc.RootElement.TryGetProperty(key, out var val) && val.ValueKind == JsonValueKind.String)
+                    return val.GetString()!;
+        }
+        catch (JsonException) { }
+        return "Authentication failed.";
     }
 }
 
